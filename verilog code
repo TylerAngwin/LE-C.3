@@ -1,0 +1,437 @@
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//	File: FunctionUnitAndBus.v
+// Top-level file for Function Unit and Bus System (LE C.3)
+//
+// Created by J.S. Thweatt, 4 November 2019
+// Based on BusControl module by Addison Ferrari
+//
+// The FunctionUnitandBus module should contain both your function unit and your bus control logic.
+//
+// Modified by: KLC, 14 Sep 2026 - switch mapping
+// 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// DO NOT MODIFY THE MODULE AND PORT DECLARATIONs OF THIS MODULE!
+
+module FunctionUnitAndBus(MAX10_CLK1_50, KEY, SW, HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, LEDR);
+	input        MAX10_CLK1_50;									// System clock
+	input  [1:0] KEY;													// DE10 Pushbuttons
+	input  [9:0] SW;													// DE10 Switches 
+	output [6:0] HEX0;												// DE10 Seven-segment displays
+	output [6:0] HEX1;
+	output [6:0] HEX2;
+	output [6:0] HEX3;
+	output [6:0] HEX4;
+	output [6:0] HEX5;
+// END MODULE AND PORT DECLARATION
+
+// BEGIN WIRE DECLARATION
+	
+// Buttons is the output of a Finite State Machine.
+	output [9:0] LEDR;												// DE10 LEDs
+
+// Each time that one of the DE10 pushbuttons is pressed and released, the corresponding value of BUTTONS goes high for one clock period.
+//	This ensures that a single press and release of a pushbutton enables only one register transfer.
+// YOU MUST USE THE VALUES FROM BUTTONS INSTEAD OF THE VALUES FROM KEY IN YOUR IMPLEMENTATION.
+	
+	wire [1:0] buttons;												// DO NOT MODIFY!
+
+// These values represent the register states.
+// The synthesis keep directive will allow you to view these wires in simulation.
+
+	wire [7:0] val0 /* synthesis keep */ ;						// DO NOT MODIFY!
+	wire [7:0] val1 /* synthesis keep */ ;						// DO NOT MODIFY!
+	wire [7:0] val2 /* synthesis keep */ ;						// DO NOT MODIFY!
+	wire [7:0] val3 /* synthesis keep */ ;						// DO NOT MODIFY!
+
+// These values represent the inputs of your Function Unit.
+// YOU MUST USE THESE NAMES AS THE INPUTS OF YOUR FUNCTION UNIT IN THE INSTANCE YOU PLACE INTO THE TOP-LEVEL MODULE!
+// YOU MUST USE THESE NAMES AS THE OUTPUTS OF THE OPERAND BUSES.
+
+	wire [7:0] operandA /* synthesis keep */ ;				// DO NOT MODIFY!
+	wire [7:0] operandB /* synthesis keep */ ;				// DO NOT MODIFY!
+	
+// This value represents the outputs of your Function Unit.
+// YOU MUST USE result AS THE RESULT OUTPUT OF YOUR FUNCTION UNIT IN THE INSTANCE YOU PLACE INTO THE TOP-LEVEL MODULE!
+// YOU MUST USE V, C, N and Z AS THE STATUS OUTPUTS OF YOUR FUNCTION UNIT IN THE INSTANCE YOU PLACE INTO THE TOP-LEVEL MODULE!
+	
+	wire [7:0] result /* synthesis keep */ ;					// DO NOT MODIFY!
+	wire V, C, N, Z  /* synthesis keep */ ;					// DO NOT MODIFY!
+
+// This value represents the output of the bus that loads the registers.
+
+	wire [7:0] bus /* synthesis keep */ ; 						// DO NOT MODIFY!
+	
+// You MAY alter this wire declarations if you wish, or even delete it entirely.
+// What you replace it with will depend on your design.
+
+	wire [3:0] load;													// Individual register load enables
+	wire       any_btn;												// High when buttons[0] or buttons[1] pulses
+
+// END WIRE DECLARATION
+	
+// BEGIN TOP-LEVEL HARDWARE MODEL //
+		
+// Review the hardware description for the buttonpress module in buttonpress.v.
+// Use BUTTONS as the control signal for your hardware instead of KEY.
+//	This ensures that a single press and release of a pushbutton enables only one register transfer.
+// DO NOT CHANGE THESE INSTANTIATIONS!
+
+//                System clock   Pushbutton  Enable
+	buttonpress b1(MAX10_CLK1_50, KEY[1],     buttons[1]);
+	buttonpress b0(MAX10_CLK1_50, KEY[0],     buttons[0]);
+	
+// Review the hardware description for the register module in register8bit.v
+// YOU MAY CHANGE THE LOAD CONTROL as needed by the system you are trying to implement.
+// Unlike LE D, you may NOT change the REGISTER INPUTS.
+// DO NOT CHANGE THE CLOCK SOURCE, THE REGISTER INPUTS, OR THE REGISTER OUTPUTS!
+
+//                 System clock   Load control  Register inputs  Register outputs      
+//                 DO NOT CHANGE  CHANGE        DO NOT CHANGE    DO NOT CHANGE
+	register8bit r0(MAX10_CLK1_50, load[0],      bus,             val0);
+	register8bit r1(MAX10_CLK1_50, load[1],      bus,             val1);
+	register8bit r2(MAX10_CLK1_50, load[2],      bus,             val2);
+	register8bit r3(MAX10_CLK1_50, load[3],      bus,             val3);
+
+// Instantiate your bus hardware here. You may also use continuous assignments as needed.
+// - The inputs of your operand buses are the register outputs (val#)
+// - The outputs of your operand buses MUST BE wires called operandA and operandB.
+// - The bus for operandA is controlled by SW[3:2]: 00 - r0; 01 - r1; 10 - r2; 11 - r3.
+// - The bus for operandB is controlled by SW[5:4]: 00 - r0; 01 - r1; 10 - r2; 11 - r3.
+// - The destination is controlled by SW[1:0]: 00 - r0; 01 - r1; 10 - r2; 11 - r3.
+
+	// Enable destination decoder whenever KEY[0] or KEY[1] is pressed and released
+	or u_any_btn(any_btn, buttons[0], buttons[1]);
+
+	// Destination Register Load Decoder (SW[1:0] -> load[3:0])
+	decoder2to4 dest_dec(any_btn, SW[1:0], load);
+
+	// Operand A Bus Multiplexer (SW[3:2] -> operandA)
+	mux4to1_8bit mux_busA(SW[3:2], val0, val1, val2, val3, operandA);
+
+	// Operand B Bus Multiplexer (SW[5:4] -> operandB)
+	mux4to1_8bit mux_busB(SW[5:4], val0, val1, val2, val3, operandB);
+
+// Instantiate your FUNCTION UNIT here.
+// - The inputs of the instance MUST BE wires called operandA and operandB.
+// - The result output of the instance MUST BE a wire called result.
+// - The status outputs of the instance MUST be wires called V, C, N, Z.
+// - The operation performed by the Function unit is controlled by SW[9:6].
+
+	function_unit FU_inst(result, V, C, N, Z, operandA, operandB, SW[9:6]);
+
+// This instance of the 8-bit 2-to-1 multiplexer buses the switches and the Function Unit result to the registers.
+// - The destination register should receive the result from the Function Unit when KEY1 is pressed.
+// - The destination register should receive the value from SW[9:2] when KEY0 is pressed.
+// DO NOT CHANGE THIS INSTANTIATION!
+
+   mux2to1_8bit m1(buttons[0], result, SW[9:2], bus);		
+
+// Review the hardware description for the hexDecoder_7seg module in hexDecoder_7seg.v.
+// HEX5/HEX4 must display the value of OperandA, which also comes from your operand bus.
+// HEX3/HEX2 must display the value of OperandB, which also comes from your operand bus.
+// HEX1/HEX0 must display the result output of the function unit.
+// DO NOT CHANGE THESE INSTANTIATIONS!
+
+//                   Upper Hex Display  Lower Hex Display  Register Value
+	hexDecoder_7seg h1(HEX5,              HEX4,              operandA);
+	hexDecoder_7seg h2(HEX3,              HEX2,              operandB);
+	hexDecoder_7seg h3(HEX1,              HEX0,              result);
+
+	
+// The LEDs must display the status output of the Function Unit
+// DO NOT CHANGE THIS CONTINUOUS ASSIGNMENT! 
+
+	assign LEDR = {6'b000000, V, C, N, Z};
+	
+// END TOP-LEVEL HARDWARE MODEL //
+
+endmodule
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//	Module: mux2to1_8bit
+// 8-bit 2-to-1 multiplexer for use in the top-level module
+//
+//	Created by Jason Thweatt, 04 November 2019
+//
+// **************************
+// DO NOT MODIFY THIS MODULE!
+// **************************
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+module mux2to1_8bit(select, in0, in1, out);
+   input        select;
+   input  [7:0] in0;
+   input  [7:0] in1;
+   output [7:0] out;
+	
+	assign out = (select == 1'b0) ? in0 :
+	             (select == 1'b1) ? in1 : 8'bxxxxxxxx;
+
+endmodule
+
+// Write the remaining hardware models that you instantiate into the top-level module starting here.
+
+// =================================================================
+// Bus Control Submodules (Carried over from LE D.1)
+// =================================================================
+
+// 2-to-4 Active-High Decoder with Enable
+module decoder2to4 (en, sel, d_out);
+    input        en;
+    input  [1:0] sel;
+    output [3:0] d_out;
+
+    wire s1_n, s0_n;
+    not inv1 (s1_n, sel[1]);
+    not inv0 (s0_n, sel[0]);
+
+    and g0 (d_out[0], en, s1_n, s0_n);   // 00 -> r0
+    and g1 (d_out[1], en, s1_n, sel[0]); // 01 -> r1
+    and g2 (d_out[2], en, sel[1], s0_n); // 10 -> r2
+    and g3 (d_out[3], en, sel[1], sel[0]); // 11 -> r3
+endmodule
+
+// 4-to-1 8-Bit Multiplexer for Operand A and Operand B Buses
+module mux4to1_8bit (sel, in0, in1, in2, in3, out);
+    input  [1:0] sel;
+    input  [7:0] in0, in1, in2, in3;
+    output [7:0] out;
+
+    wire [3:0] s;
+    wire s1_n, s0_n;
+
+    not inv1 (s1_n, sel[1]);
+    not inv0 (s0_n, sel[0]);
+
+    and dec0 (s[0], s1_n, s0_n);
+    and dec1 (s[1], s1_n, sel[0]);
+    and dec2 (s[2], sel[1], s0_n);
+    and dec3 (s[3], sel[1], sel[0]);
+
+    assign out = (in0 & {8{s[0]}}) |
+                 (in1 & {8{s[1]}}) |
+                 (in2 & {8{s[2]}}) |
+                 (in3 & {8{s[3]}});
+endmodule
+
+
+// =================================================================
+// Function Unit & Submodules (Carried over from LE C.2)
+// =================================================================
+
+module function_unit (result, V, C, N, Z, OpA, OpB, FS);
+    input  [3:0] FS;
+    input  [7:0] OpA, OpB;
+    output [7:0] result;
+    output       V, C, N, Z;
+
+    // 1. Subcircuit Instantiations (3 Functional Blocks)
+    // Block 0: Arithmetic Operations (FS = 0000 to 0101)
+    wire [7:0] res_arith;
+    wire       v_arith, c_arith;
+    arith_circuit b_arith (res_arith, v_arith, c_arith, OpA, OpB, FS[2:0]);
+
+    // Block 1: Bitwise Logic & Shift Left (FS = 1000 to 1011)
+    wire [7:0] res_logic;
+    logic_circuit b_logic (res_logic, OpA, OpB, FS[1:0]);
+
+    // Block 2: Remainder, Modulus & Shift Right (FS = 1100 to 1110)
+    wire [7:0] res_special;
+    special_circuit b_special (res_special, OpB, FS[1:0]);
+
+    // 2. High-Level Block Selection Logic
+    wire fs3_n, fs2_n, fs1_n;
+    not (fs3_n, FS[3]);
+    not (fs2_n, FS[2]);
+    not (fs1_n, FS[1]);
+
+    // Arithmetic block is valid when FS[3] == 0 and FS[2:0] <= 5
+    wire not_fs2_or_not_fs1;
+    wire arith_valid;
+    or  (not_fs2_or_not_fs1, fs2_n, fs1_n);
+    and (arith_valid, fs3_n, not_fs2_or_not_fs1);
+
+    // Logic block is valid when FS[3:2] == 2'b10
+    wire sel_logic;
+    and (sel_logic, FS[3], fs2_n);
+
+    // Special block is valid when FS[3:2] == 2'b11 and FS[1:0] != 2'b11
+    wire special_valid, sel_special;
+    nand (special_valid, FS[1], FS[0]);
+    and  (sel_special, FS[3], FS[2], special_valid);
+
+    // Multiplex final 8-bit result across all 3 functional blocks
+    assign result = (res_arith   & {8{arith_valid}}) |
+                    (res_logic   & {8{sel_logic}})   |
+                    (res_special & {8{sel_special}});
+
+    // 3. Status Bits (V, C, N, Z) Logic
+    // V and C are active ONLY for arithmetic operations (and cleared for mova = 0000)
+    wire is_mova_top;
+    and (is_mova_top, fs3_n, fs2_n, fs1_n, ~FS[0]);
+    assign V = v_arith & arith_valid & ~is_mova_top;
+    assign C = c_arith & arith_valid & ~is_mova_top;
+
+    // Both shift operations (lslB: 1011 and lsrB: 1110) clear ALL status bits
+    wire is_lslB, is_lsrB, clear_status;
+    and (is_lslB, FS[3], fs2_n, FS[1], FS[0]);
+    and (is_lsrB, FS[3], FS[2], FS[1], ~FS[0]);
+    or  (clear_status, is_lslB, is_lsrB);
+
+    // Negative (N): MSB of active result, forced to 0 if clear_status is asserted
+    assign N = result[7] & ~clear_status;
+
+    // Zero (Z): 1 when all bits of result are 0, forced to 0 if clear_status is asserted
+    wire result_is_zero;
+    assign result_is_zero = ~(|result);
+    assign Z = result_is_zero & ~clear_status;
+
+endmodule
+
+
+// Submodule 1: arith_circuit (Carried over from LE C.1.a)
+module arith_circuit (result, V, C, OpA, OpB, opselect);
+    input  [2:0] opselect;
+    input  [7:0] OpA, OpB;
+    output [7:0] result;
+    output       V, C;
+
+    wire s2_n, s1_n, s0_n;
+    not (s2_n, opselect[2]);
+    not (s1_n, opselect[1]);
+    not (s0_n, opselect[0]);
+
+    wire is_mova, is_add, is_sub, is_decA, is_negA, is_incB;
+    and (is_mova, s2_n, s1_n, s0_n);               // 000: mova
+    and (is_add,  s2_n, s1_n, opselect[0]);        // 001: add
+    and (is_sub,  s2_n, opselect[1], s0_n);        // 010: subab
+    and (is_decA, s2_n, opselect[1], opselect[0]); // 011: decA
+    and (is_negA, opselect[2], s1_n, s0_n);        // 100: negA
+    and (is_incB, opselect[2], s1_n, opselect[0]); // 101: incB
+
+    // Adder carry-in: C0 = 1 for subtraction, 2's complement negation, and increment
+    wire c0;
+    or (c0, is_sub, is_negA, is_incB);
+
+    // Steering logic for Adder input X
+    wire sel_opA_x;
+    or (sel_opA_x, is_mova, is_add, is_sub, is_decA);
+    wire [7:0] X;
+    assign X = OpA & {8{sel_opA_x}};
+
+    // Steering logic for Adder input Y
+    wire [7:0] notB, notA;
+    assign notB = ~OpB;
+    assign notA = ~OpA;
+
+    wire [7:0] Y;
+    assign Y = (OpB   & {8{is_add | is_incB}}) |
+               (notB  & {8{is_sub}})           |
+               (notA  & {8{is_negA}})          |
+               (8'hFF & {8{is_decA}});
+
+    // 8-bit Ripple-Carry Adder constructed with 1-bit Full Adders
+    wire [7:0] c_wire;
+    full_adder fa0 (result[0], c_wire[0], X[0], Y[0], c0);
+    full_adder fa1 (result[1], c_wire[1], X[1], Y[1], c_wire[0]);
+    full_adder fa2 (result[2], c_wire[2], X[2], Y[2], c_wire[1]);
+    full_adder fa3 (result[3], c_wire[3], X[3], Y[3], c_wire[2]);
+    full_adder fa4 (result[4], c_wire[4], X[4], Y[4], c_wire[3]);
+    full_adder fa5 (result[5], c_wire[5], X[5], Y[5], c_wire[4]);
+    full_adder fa6 (result[6], c_wire[6], X[6], Y[6], c_wire[5]);
+    full_adder fa7 (result[7], c_wire[7], X[7], Y[7], c_wire[6]);
+
+    // Carry-out from MSB stage
+    assign C = c_wire[7];
+
+    // Two's complement overflow: V = C_out XOR C_in of MSB
+    xor (V, c_wire[7], c_wire[6]);
+
+endmodule
+
+
+// Submodule 2: logic_circuit (Carried over from LE C.1.b - block0)
+module logic_circuit (result, OpA, OpB, opselect);
+    input  [1:0] opselect;
+    input  [7:0] OpA, OpB;
+    output [7:0] result;
+
+    wire s1_n, s0_n;
+    not (s1_n, opselect[1]);
+    not (s0_n, opselect[0]);
+
+    wire sel_or, sel_notA, sel_notB, sel_lslB;
+    and (sel_or,   s1_n,        s0_n);        // 00 -> or
+    and (sel_notA, s1_n,        opselect[0]); // 01 -> notA
+    and (sel_notB, opselect[1], s0_n);        // 10 -> notB
+    and (sel_lslB, opselect[1], opselect[0]); // 11 -> lslB
+
+    wire [7:0] res_or   = OpA | OpB;
+    wire [7:0] res_notA = ~OpA;
+    wire [7:0] res_notB = ~OpB;
+    wire [7:0] res_lslB = {OpB[6:0], 1'b0};   // 0 logic gates (bus rewiring)
+
+    assign result = (res_or   & {8{sel_or}})   |
+                    (res_notA & {8{sel_notA}}) |
+                    (res_notB & {8{sel_notB}}) |
+                    (res_lslB & {8{sel_lslB}});
+
+endmodule
+
+
+// Submodule 3: special_circuit (Carried over from LE C.1.b - block1)
+module special_circuit (result, OpB, opselect);
+    input  [1:0] opselect;
+    input  [7:0] OpB;
+    output [7:0] result;
+
+    wire s1_n, s0_n;
+    not (s1_n, opselect[1]);
+    not (s0_n, opselect[0]);
+
+    wire sel_rem16, sel_mod8, sel_lsrB;
+    and (sel_rem16, s1_n,        s0_n);        // 00 -> rem16
+    and (sel_mod8,  s1_n,        opselect[0]); // 01 -> mod8
+    and (sel_lsrB,  opselect[1], s0_n);        // 10 -> lsrB
+
+    // rem16: Truncation toward 0 (preserves sign of B when lower bits != 0)
+    wire lower4_has_ones;
+    assign lower4_has_ones = |OpB[3:0];
+    wire rem_sign_bit;
+    assign rem_sign_bit = OpB[7] & lower4_has_ones;
+    wire [7:0] res_rem16;
+    assign res_rem16 = {{4{rem_sign_bit}}, OpB[3:0]};
+
+    // mod8: Floor toward -infinity (lower 3 bits zero-extended)
+    wire [7:0] res_mod8;
+    assign res_mod8 = {5'b00000, OpB[2:0]};
+
+    // lsrB: Logical shift right by 1 bit (0 logic gates, bus rewiring)
+    wire [7:0] res_lsrB;
+    assign res_lsrB = {1'b0, OpB[7:1]};
+
+    assign result = (res_rem16 & {8{sel_rem16}}) |
+                    (res_mod8  & {8{sel_mod8}})  |
+                    (res_lsrB  & {8{sel_lsrB}});
+
+endmodule
+
+
+// Submodule 4: full_adder (1-Bit Structural Full Adder)
+module full_adder (s, cout, a, b, cin);
+    input  a, b, cin;
+    output s, cout;
+
+    wire w1, w2, w3;
+    xor (w1, a, b);
+    xor (s, w1, cin);
+
+    and (w2, w1, cin);
+    and (w3, a, b);
+    or  (cout, w2, w3);
+
+endmodule
